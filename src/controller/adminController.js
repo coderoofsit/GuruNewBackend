@@ -30,6 +30,7 @@ const FCM = require("../models/fcmToken.model");
 const AWS = require("aws-sdk");
 const S3 = require("aws-sdk/clients/s3");
 
+
 // In-memory storage for failed login attempts for admins
 const failedLoginAttempts = {};
 
@@ -419,6 +420,8 @@ const createQuiz = async (req, res) => {
   console.log("Request Payload:", req.body);
   console.log("File Details:", req.files);
 
+
+
   const {
     date,
     CourseId,
@@ -434,10 +437,14 @@ const createQuiz = async (req, res) => {
 
   try {
     // Convert the received date and time to IST
-    const istStartTime = new Date(`${date}T${startTime}Z`);
-    const istEndTime = new Date(`${date}T${endTime}Z`);
-    const istResultTime = new Date(`${date}T${resultTime}Z`)
+    // const istStartTime = new Date(`${date}T${startTime}Z`);
+    // const istEndTime = new Date(`${date}T${endTime}Z`);
+    // const istResultTime = new Date(`${date}T${resultTime}Z`)
 
+
+    const istStartTime = moment.tz(`${date} ${startTime}`, "YYYY-MM-DD HH:mm:ss", "Asia/Kolkata").toDate();
+    const istEndTime = moment.tz(`${date} ${endTime}`, "YYYY-MM-DD HH:mm:ss", "Asia/Kolkata").toDate();
+    const istResultTime = moment.tz(`${date} ${resultTime}`, "YYYY-MM-DD HH:mm:ss", "Asia/Kolkata").toDate();
     // Convert IST times to GMT for consistent storage
     const gmtStartTime = new Date(
       istStartTime.getTime() + istStartTime.getTimezoneOffset() * 60000
