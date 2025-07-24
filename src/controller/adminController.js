@@ -118,27 +118,37 @@ const signup = async (req, res) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
 
+  console.log("Login attempt received:", { email });
+
   if (!email) {
+    console.warn("Login failed: Email is missing");
     return res.status(400).json({ error: "Your Email is required" });
   }
 
   if (!password) {
+    console.warn("Login failed: Password is missing");
     return res.status(400).json({ error: "Your Password is required" });
   }
 
   try {
+    console.log("Searching for admin in DB:", email);
     const admin = await adminModel.findOne({ email });
 
     if (admin) {
-      // Check if the admin is currently locked out
+      console.log("Admin found:", admin.email);
+
+      // Check if admin is locked out
       const lastFailedAttempt = failedLoginAttempts[admin.email];
       if (
         lastFailedAttempt &&
         Date.now() - lastFailedAttempt < LOCKOUT_DURATION
       ) {
-        // Calculate the remaining lockout time
         const remainingLockoutTime =
           LOCKOUT_DURATION - (Date.now() - lastFailedAttempt);
+
+        console.warn(
+          `Account locked for ${admin.email}. Remaining lockout: ${remainingLockoutTime}ms`
+        );
 
         return res.status(401).json({
           error: "Account locked. Try again later.",
@@ -147,29 +157,38 @@ const login = async (req, res) => {
       }
 
       if (admin.password === password) {
-        // Reset failed attempts upon successful login
-        delete failedLoginAttempts[admin.email];
+        console.log("Password match for:", admin.email);
 
-        let token = jwt.sign(
+        // Reset failed login attempts
+        delete failedLoginAttempts[admin.email];
+        console.log("Failed login attempts reset for:", admin.email);
+
+        const token = jwt.sign(
           { adminId: admin._id, email: admin.email },
           process.env.PRIVATEKEY
         );
 
-        res
-          .status(200)
-          .send({ message: "Login Successful", token, name: admin.name });
+        console.log("JWT generated for:", admin.email);
+        return res.status(200).send({
+          message: "Login Successful",
+          token,
+          name: admin.name,
+        });
       } else {
-        // Increment failed attempts and store the timestamp
         failedLoginAttempts[admin.email] = Date.now();
-        res.status(401).send({ message: "Login Failed" });
+        console.warn("Incorrect password for:", admin.email);
+        return res.status(401).send({ message: "Login Failed" });
       }
     } else {
-      res.status(404).send("You are not a registered admin");
+      console.warn("Admin not found:", email);
+      return res.status(404).send("You are not a registered admin");
     }
   } catch (e) {
+    console.error("Error during login:", e);
     return res.status(500).json({ error: e.message });
   }
 };
+
 
 // Fetch All User Data
 const getAllUsers = async (req, res) => {
@@ -1279,57 +1298,84 @@ const uploadTos3 = async function (file, folder, userId) {
 };
 
 const createActiveCourse = async (req, res) => {
-  const { ActivecourseHeading, Description, Duration, planId, CourseId } = req.body;
+  const {
+    ActivecourseHeading,
+    Description,
+    Duration,
+    planId,
+    CourseId,
+    ActivecourseThumbnail,
+    VideoUrl
+  } = req.body;
+
+  console.log("📥 Raw request data:", req.body);
 
   if (!ActivecourseHeading || !Description || !Duration || !CourseId || !planId) {
     return res.status(400).json({ error: "All fields are required" });
   }
 
   try {
-    let thumbnailUrl = '';
-    let videoUrl = '';
+    // // Initialize variables
+    // let thumbnailUrl = '';
+    // let videoUrl = '';
 
-    // Check if userId is available
+    // Extract userId from authenticated user
     const userId = req.user ? req.user.id : null;
-    console.log("User ID:", userId); // Log the userId
+    console.log("👤 User ID:", userId);
+
+    // Use thumbnail and video URL from req.body
+    // if (receivedThumbnailUrl) {
+    //   thumbnailUrl = receivedThumbnailUrl;
+    //   console.log("🖼️ Thumbnail URL received:", thumbnailUrl);
+    // }
+
+    // if (receivedVideoUrl) {
+    //   videoUrl = receivedVideoUrl;
+    //   console.log("🎞️ Video URL received:", videoUrl);
+    // }
 
     // Upload ActivecourseThumbnail if provided
-    if (req.files && req.files.ActivecourseThumbnail) {
-      const thumbnailFile = req.files.ActivecourseThumbnail;
-      console.log("Thumbnail file:", thumbnailFile); // Log the thumbnailFile
-      const thumbnailUploadResult = await uploadTos3(thumbnailFile, "thumbnails", userId);
-      thumbnailUrl = thumbnailUploadResult.Location;
-    }
+    // if (req.files && req.files.ActivecourseThumbnail) {
+    //   const thumbnailFile = req.files.ActivecourseThumbnail;
+    //   console.log("Thumbnail file:", thumbnailFile);
+    //   const thumbnailUploadResult = await uploadTos3(thumbnailFile, "thumbnails", userId);
+    //   thumbnailUrl = thumbnailUploadResult.Location;
+    // }
 
     // Upload VideoUrl if provided
-    if (req.files && req.files.VideoUrl) {
-      const videoFile = req.files.VideoUrl;
-      console.log("Video file:", videoFile); // Log the videoFile
-      const videoUploadResult = await uploadTos3(videoFile, "videos", userId);
-      videoUrl = videoUploadResult.Location;
-    }
+    // if (req.files && req.files.VideoUrl) {
+    //   const videoFile = req.files.VideoUrl;
+    //   console.log("Video file:", videoFile);
+    //   const videoUploadResult = await uploadTos3(videoFile, "videos", userId);
+    //   videoUrl = videoUploadResult.Location;
+    // }
 
-    // Create ActivecourseModel and save to the database
-    const activeCourse = await ActivecourseModel.create({
+    const activeCoursePayload = {
       ActivecourseHeading,
-      ActivecourseThumbnail: thumbnailUrl,
+      ActivecourseThumbnail: ActivecourseThumbnail,
       Description,
       Duration,
-      VideoUrl: videoUrl,
+      VideoUrl: VideoUrl,
       planId,
-      CourseId,
-    });
+      CourseId
+    };
+
+    console.log("📝 Data to be saved in DB:", activeCoursePayload);
+
+    const activeCourse = await ActivecourseModel.create(activeCoursePayload);
+
+    console.log("✅ Active course created in DB:", activeCourse);
 
     return res.status(200).json({
       message: "Activecourse Added successfully",
       activeCourse,
     });
+
   } catch (error) {
-    console.error("Error creating active course:", error);
+    console.error("❌ Error creating active course:", error);
     return res.status(500).json({ error: "Failed to create active course" });
   }
 };
-
 
 
 
