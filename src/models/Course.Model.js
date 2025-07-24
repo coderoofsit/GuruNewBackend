@@ -2,12 +2,11 @@ const { Schema, model } = require("mongoose");
 
 const courseSchema = new Schema({
   title: String,
- 
-  duration:String,
-  thumbnail:String,
+  duration: String,
+  thumbnail: String,
   subjects: [{
     title: String,
-    level:Number,
+    level: Number,
     options: [{
       heading: String,
       url: String,
@@ -16,16 +15,17 @@ const courseSchema = new Schema({
       Conference_no: String,
       subjects: [{
         title: String,
-        videourls: [
-          {
-            url: String,
-            thumbnail: String, 
-          },
-        ],
-        pdfsurls: [String],
+        videourls: [{
+          url: String,
+          thumbnail: String, 
+        }],
+        pdfsurls: [{  // Make sure this is an array of objects, not strings
+          url: String,
+          thumbnail: String,
+        }]
       }],
       time: String,
-      date:String,
+      date: String,
     }],
   }],
 });

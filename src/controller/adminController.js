@@ -676,34 +676,29 @@ const createCourseSubjectOption = async (req, res) => {
 
           return {
             title: subjectData.title,
+            level: subjectData.level || 0, // Add level support
             options: subjectData.options.map((optionData) => {
               if (!optionData.heading || !optionData.url) {
                 return res.status(400).json({ error: "Invalid option data" });
               }
 
-              // Check if the subject is "Recorded" and add subjects accordingly
-              const subjects =
-                optionData.subjects && subjectData.title === "Recorded"
-                  ? optionData.subjects.map((subject) => ({
-                      title: subject.title,
-                      videourls: subject.videourls.map((video) => ({
-                        url: video.url,
-                        thumbnail: video.thumbnail, // Include the thumbnail field
-                      })),
-                      pdfsurls: subject.pdfsurls || [],
-                    }))
-                  : subjectData.title === "Study Material"
-                  ? optionData.subjects.map((subject) => ({
-                      title: subject.title,
-                      videourls: [], // No video URLs for Study Material
-                      pdfsurls: subject.pdfsurls || [],
-                    }))
-                  : [];
+              // Handle subjects for all types (Live, Recorded, Study Material)
+              const subjects = optionData.subjects 
+                ? optionData.subjects.map((subject) => ({
+                    title: subject.title,
+                    videourls: subject.videourls ? subject.videourls.map((video) => ({
+                      url: video.url || '',
+                      thumbnail: video.thumbnail || '',
+                    })) : [],
+                    pdfsurls: subject.pdfsurls ? subject.pdfsurls.map((pdf) => ({
+                      url: pdf.url || '',
+                      thumbnail: pdf.thumbnail || '',
+                    })) : [],
+                  }))
+                : [];
 
-              const time =
-                subjectData.title === "Live" ? optionData.time : undefined;
-              const date =
-                subjectData.title === "Live" ? optionData.date : undefined;
+              const time = subjectData.title === "Live" ? optionData.time : undefined;
+              const date = subjectData.title === "Live" ? optionData.date : undefined;
 
               return {
                 heading: optionData.heading,
@@ -723,17 +718,20 @@ const createCourseSubjectOption = async (req, res) => {
       responses.push({ message: "Course created successfully", course });
     }
 
-    // send notification to all users
+    // Send notification to all users
     const fcmTokens = await FCM.find({});
     for (let i = 0; i < fcmTokens.length; i++) {
-      await sendNotification(fcmTokens[i].token, "title", "body");
+      await sendNotification(fcmTokens[i].token, "New Course Added", "Check out our new course!");
     }
+    
     return res.status(200).json(responses);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: e.message });
   }
 };
+
+
 const addSubjectsToCourse = async (req, res) => {
   const courseId = req.params.courseId;
   const newSubjectsData = req.body.newSubjectsData;
@@ -748,19 +746,45 @@ const addSubjectsToCourse = async (req, res) => {
       return res.status(404).json({ error: 'Course not found' });
     }
 
-    // Find the "Recorded" section in the course subjects
-    const recordedSectionIndex = course.subjects.findIndex(subject => subject.title === 'Recorded');
-    if (recordedSectionIndex === -1) {
-      return res.status(404).json({ error: 'Recorded section not found in course' });
+    // Find the section (Live, Recorded, or Study Material)
+    const targetSectionIndex = course.subjects.findIndex(subject => {
+      // You can specify which section to add to, or make it dynamic
+      return subject.title === 'Recorded'; // or get from request body
+    });
+    
+    if (targetSectionIndex === -1) {
+      return res.status(404).json({ error: 'Target section not found in course' });
     }
 
-    // Ensure that the "subjects" property within the "Recorded" section is initialized as an array
-    if (!Array.isArray(course.subjects[recordedSectionIndex].subjects)) {
-      course.subjects[recordedSectionIndex].subjects = [];
+    // Process new subjects data to ensure proper structure
+    const processedSubjects = newSubjectsData.map(subjectData => ({
+      title: subjectData.title,
+      videourls: subjectData.videourls ? subjectData.videourls.map(video => ({
+        url: video.url || '',
+        thumbnail: video.thumbnail || '',
+      })) : [],
+      pdfsurls: subjectData.pdfsurls ? subjectData.pdfsurls.map(pdf => ({
+        url: pdf.url || '',
+        thumbnail: pdf.thumbnail || '',
+      })) : [],
+    }));
+
+    // Add new subjects to the target section
+    if (!course.subjects[targetSectionIndex].options) {
+      course.subjects[targetSectionIndex].options = [];
     }
 
-    // Add new subjects to the "subjects" array within the "Recorded" section
-    course.subjects[recordedSectionIndex].subjects.push(...newSubjectsData);
+    // Find the specific option to add subjects to, or create a new option
+    const targetOptionIndex = 0; // You might want to make this dynamic
+    if (!course.subjects[targetSectionIndex].options[targetOptionIndex]) {
+      course.subjects[targetSectionIndex].options.push({
+        heading: 'Default Option',
+        url: '',
+        subjects: []
+      });
+    }
+
+    course.subjects[targetSectionIndex].options[targetOptionIndex].subjects.push(...processedSubjects);
     course = await course.save();
 
     res.status(200).json({ message: 'Subjects added to course successfully', course });
@@ -769,8 +793,6 @@ const addSubjectsToCourse = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
-
 
 
 
@@ -794,6 +816,7 @@ const getCourses = async (req, res) => {
           return {
             id: subject._id,
             title: subject.title,
+            level: subject.level || 0,
             options: subject.options.map((option) => {
               const formattedOption = {
                 id: option._id,
@@ -807,7 +830,7 @@ const getCourses = async (req, res) => {
                 subjects: option.subjects.map((sub) => ({
                   title: sub.title,
                   videourls: sub.videourls || [],
-                  pdfsurls: sub.pdfsurls || [],
+                  pdfsurls: sub.pdfsurls || [], // Now supports objects with url and thumbnail
                 })),
               };
 
@@ -828,37 +851,81 @@ const getCourses = async (req, res) => {
 // Edit Course
 const editCourse = async (req, res) => {
   try {
-    // Extract information from the request
+    console.log('--- Edit Course Request Received ---');
     const courseId = req.params.courseId;
     const { title, duration, thumbnail, subjects } = req.body;
+
+    console.log('Course ID:', courseId);
+    console.log('Incoming Data:', { title, duration, thumbnail });
+    console.log('Subjects:', JSON.stringify(subjects, null, 2));
 
     // Find the course by ID
     const course = await CourseModel.findById(courseId);
 
     // Check if the course exists
     if (!course) {
+      console.warn(`Course not found with ID: ${courseId}`);
       return res.status(404).json({ error: "Course not found" });
     }
+
+    // Process subjects to ensure proper data structure
+    const processedSubjects = subjects.map(subject => {
+      console.log(`Processing subject ID: ${subject.id}`);
+      return {
+        ...subject,
+        _id: subject.id,
+        options: subject.options.map(option => {
+          console.log(`  Processing option ID: ${option.id}`);
+          return {
+            ...option,
+            _id: option.id,
+            subjects: option.subjects.map(subSubject => {
+              console.log(`    Processing subSubject: ${subSubject.title}`);
+              const processedPDFs = subSubject.pdfsurls ? subSubject.pdfsurls.map(pdf => {
+                if (typeof pdf === 'string') {
+                  console.log(`      PDF string converted to object: ${pdf}`);
+                  return { url: pdf, thumbnail: '' };
+                }
+                return {
+                  url: pdf.url || '',
+                  thumbnail: pdf.thumbnail || ''
+                };
+              }) : [];
+
+              return {
+                ...subSubject,
+                videourls: subSubject.videourls || [],
+                pdfsurls: processedPDFs
+              };
+            })
+          };
+        })
+      };
+    });
 
     // Update the course details
     course.title = title;
     course.duration = duration;
     course.thumbnail = thumbnail;
-    course.subjects = subjects;
+    course.subjects = processedSubjects;
+
+    console.log('Final processed course object:', JSON.stringify(course, null, 2));
 
     // Save the updated course
     await course.save();
+    console.log('Course saved successfully');
 
     // Return success message and the updated course
     return res
       .status(200)
       .json({ message: "Course edited successfully", course });
+
   } catch (e) {
-    // Handle errors
-    console.error(e);
+    console.error('Edit course error:', e);
     return res.status(500).json({ error: e.message });
   }
 };
+
 
 const deleteCourse = async (req, res) => {
   const courseId = req.params.courseId; // Use "courseId" as the parameter name
