@@ -847,6 +847,7 @@ const getCourses = async (req, res) => {
                 batch: option.batch,
                 date: option.date,
                 time: option.time,
+                endDate:option.endDate,
                 Conference_no: option.Conference_no,
                 subjects: option.subjects.map((sub) => ({
                   title: sub.title,
