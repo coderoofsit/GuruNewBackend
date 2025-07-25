@@ -26,6 +26,7 @@ const courseSchema = new Schema({
       }],
       time: String,
       date: String,
+      endDate:String,
     }],
   }],
 });

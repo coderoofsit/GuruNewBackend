@@ -718,6 +718,7 @@ const createCourseSubjectOption = async (req, res) => {
 
               const time = subjectData.title === "Live" ? optionData.time : undefined;
               const date = subjectData.title === "Live" ? optionData.date : undefined;
+              const endDate = subjectData.title === "Live" ? optionData.endDate : undefined;
 
               return {
                 heading: optionData.heading,
@@ -728,6 +729,7 @@ const createCourseSubjectOption = async (req, res) => {
                 subjects,
                 time,
                 date,
+                endDate
               };
             }),
           };
