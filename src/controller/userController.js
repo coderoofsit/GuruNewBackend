@@ -700,7 +700,7 @@ const createPaymentIntent = async (req, res) => {
   try {
     const { amount, userId, planId, courseId, selectedOptions, level } =
       req.body;
-
+    console.log(" Raw request data payment intent::", req.body);
     const amountInPaise = amount * 100;
     const currency = "INR";
     const receiptId = `order_${Date.now()}`;
@@ -751,7 +751,7 @@ const createPaymentIntent = async (req, res) => {
           selectedPlan: planId,
           selectedOptions: selectedOptions,
           courseId: courseId,
-        });
+        }); 
 
         const purchasedPlan = new PurchasedPlan({
           userId: req.user.userId,
@@ -761,7 +761,8 @@ const createPaymentIntent = async (req, res) => {
           amount: amount,
           transactionId: transactionId,
           receiptId: order.receipt,
-          level: level, // Save the level here
+          level: level,
+          paymentStatus: true,
         });
 
         await payment.save();
