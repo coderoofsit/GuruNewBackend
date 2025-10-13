@@ -812,7 +812,7 @@ const getFeedbackById = async (req, res) => {
 // };
 
 
-const createPaymentRecord = async (req, res) => {
+const createPaymentIntent = async (req, res) => {
   try {
     const {
       amount,
