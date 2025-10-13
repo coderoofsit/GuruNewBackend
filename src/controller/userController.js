@@ -696,118 +696,201 @@ const getFeedbackById = async (req, res) => {
   }
 };
 
-const createPaymentIntent = async (req, res) => {
+// const createPaymentIntent = async (req, res) => {
+//   try {
+//     const { amount, userId, planId, courseId, selectedOptions, level } =
+//       req.body;
+//     console.log(" Raw request data payment intent::", req.body);
+//     const amountInPaise = amount * 100;
+//     const currency = "INR";
+//     const receiptId = `order_${Date.now()}`;
+
+//     const options = {
+//       amount: amountInPaise,
+//       currency,
+//       receipt: receiptId,
+//       payment_capture: 1,
+//     };
+
+//     razorpay.orders.create(options, async (err, order) => {
+//       if (err) {
+//         return res.status(500).json({ error: err.message });
+//       }
+
+//       const transactionId = order.id;
+//       const transactionDateTime = new Date();
+
+//       try {
+//         const selectedPlan = await PlanModel.findById(planId);
+//         if (!selectedPlan) {
+//           return res.status(400).json({ error: "Invalid plan ID" });
+//         }
+
+//         const user = await userModel.findById(req.user.userId);
+//         if (user) {
+//           user.courseDetails.push({
+//             selectedPlan: planId,
+//             courseId: courseId,
+//             selectedOptions: selectedOptions,
+//           });
+
+//           await user.save();
+
+//           const featuredCourse = selectedPlan.title;
+//           user.featuredCourse = featuredCourse;
+//           await user.save();
+//         }
+
+//         const payment = new Payment({
+//           userId: req.user.userId,
+//           amount: amount,
+//           transactionId: transactionId,
+//           receiptId: order.receipt,
+//           timestamp: transactionDateTime,
+//           paymentStatus: "Pending",
+//           selectedPlan: planId,
+//           selectedOptions: selectedOptions,
+//           courseId: courseId,
+//         }); 
+
+//         const purchasedPlan = new PurchasedPlan({
+//           userId: req.user.userId,
+//           planId: planId,
+//           selectedOptions: selectedOptions,
+//           courseId: courseId,
+//           amount: amount,
+//           transactionId: transactionId,
+//           receiptId: order.receipt,
+//           level: level,
+//           paymentStatus: true,
+//         });
+
+//         await payment.save();
+//         await purchasedPlan.save();
+
+//         // Now, you would typically wait for a webhook/event from Razorpay
+//         // to confirm the payment success. For this example, let's assume
+//         // the payment is successful after a delay of 10 seconds.
+//         setTimeout(async () => {
+//           // Simulate a successful payment
+//           const isPaymentSuccessful = true;
+
+//           if (isPaymentSuccessful) {
+//             // Update the payment status to "Success" after successful payment confirmation
+//             payment.paymentStatus = "Success";
+//             await payment.save();
+
+//             // Additional logic after successful payment (if needed)
+
+//             const response = {
+//               transactionId,
+//               receiptId: order.receipt,
+//               order,
+//               timestamp: transactionDateTime,
+//               paymentStatus: "Success",
+//               userId: userId,
+//               selectedPlan: planId,
+//               selectedOptions: selectedOptions,
+//               courseId: courseId,
+//             };
+
+//             // console.log(response);
+//             res.render("Payment", { transactionId });
+//           } else {
+//             // If payment is not successful, handle accordingly
+//             res.status(400).json({ error: "Payment failed" });
+//           }
+//         }, 10000); // Simulating a delay of 10 seconds for demonstration purposes
+//       } catch (error) {
+//         console.error("Error during payment creation:", error);
+//         return res.status(500).json({ error: "Failed to create payment" });
+//       }
+//     });
+//   } catch (error) {
+//     return res.status(500).json({ error: error.message });
+//   }
+// };
+
+
+const createPaymentRecord = async (req, res) => {
   try {
-    const { amount, userId, planId, courseId, selectedOptions, level } =
-      req.body;
-    console.log(" Raw request data payment intent::", req.body);
-    const amountInPaise = amount * 100;
-    const currency = "INR";
-    const receiptId = `order_${Date.now()}`;
+    const {
+      amount,
+      userId,
+      planId,
+      courseId,
+      selectedOptions,
+      level,
+      transactionId, // order.id from frontend
+      receiptId,      // order.receipt from frontend
+    } = req.body;
 
-    const options = {
-      amount: amountInPaise,
-      currency,
-      receipt: receiptId,
-      payment_capture: 1,
-    };
+    console.log("Received payment confirmation data:", req.body);
 
-    razorpay.orders.create(options, async (err, order) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+    // Validate required fields
+    if (!transactionId || !receiptId || !amount || !planId || !userId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
-      const transactionId = order.id;
-      const transactionDateTime = new Date();
+    const transactionDateTime = new Date();
 
-      try {
-        const selectedPlan = await PlanModel.findById(planId);
-        if (!selectedPlan) {
-          return res.status(400).json({ error: "Invalid plan ID" });
-        }
+    // Fetch plan details
+    const selectedPlan = await PlanModel.findById(planId);
+    if (!selectedPlan) {
+      return res.status(400).json({ error: "Invalid plan ID" });
+    }
 
-        const user = await userModel.findById(req.user.userId);
-        if (user) {
-          user.courseDetails.push({
-            selectedPlan: planId,
-            courseId: courseId,
-            selectedOptions: selectedOptions,
-          });
+    // Update user's purchased courses
+    const user = await userModel.findById(userId);
+    if (user) {
+      user.courseDetails.push({
+        selectedPlan: planId,
+        courseId,
+        selectedOptions,
+      });
 
-          await user.save();
+      user.featuredCourse = selectedPlan.title;
+      await user.save();
+    }
 
-          const featuredCourse = selectedPlan.title;
-          user.featuredCourse = featuredCourse;
-          await user.save();
-        }
+    // Create Payment record
+    const payment = new Payment({
+      userId,
+      amount,
+      transactionId,
+      receiptId,
+      timestamp: transactionDateTime,
+      paymentStatus: "Success", // since frontend confirms success
+      selectedPlan: planId,
+      selectedOptions,
+      courseId,
+    });
 
-        const payment = new Payment({
-          userId: req.user.userId,
-          amount: amount,
-          transactionId: transactionId,
-          receiptId: order.receipt,
-          timestamp: transactionDateTime,
-          paymentStatus: "Pending",
-          selectedPlan: planId,
-          selectedOptions: selectedOptions,
-          courseId: courseId,
-        }); 
+    // Create PurchasedPlan record
+    const purchasedPlan = new PurchasedPlan({
+      userId,
+      planId,
+      selectedOptions,
+      courseId,
+      amount,
+      transactionId,
+      receiptId,
+      level,
+      paymentStatus: true,
+    });
 
-        const purchasedPlan = new PurchasedPlan({
-          userId: req.user.userId,
-          planId: planId,
-          selectedOptions: selectedOptions,
-          courseId: courseId,
-          amount: amount,
-          transactionId: transactionId,
-          receiptId: order.receipt,
-          level: level,
-          paymentStatus: true,
-        });
+    await payment.save();
+    await purchasedPlan.save();
 
-        await payment.save();
-        await purchasedPlan.save();
-
-        // Now, you would typically wait for a webhook/event from Razorpay
-        // to confirm the payment success. For this example, let's assume
-        // the payment is successful after a delay of 10 seconds.
-        setTimeout(async () => {
-          // Simulate a successful payment
-          const isPaymentSuccessful = true;
-
-          if (isPaymentSuccessful) {
-            // Update the payment status to "Success" after successful payment confirmation
-            payment.paymentStatus = "Success";
-            await payment.save();
-
-            // Additional logic after successful payment (if needed)
-
-            const response = {
-              transactionId,
-              receiptId: order.receipt,
-              order,
-              timestamp: transactionDateTime,
-              paymentStatus: "Success",
-              userId: userId,
-              selectedPlan: planId,
-              selectedOptions: selectedOptions,
-              courseId: courseId,
-            };
-
-            console.log(response);
-            res.render("Payment", { transactionId });
-          } else {
-            // If payment is not successful, handle accordingly
-            res.status(400).json({ error: "Payment failed" });
-          }
-        }, 10000); // Simulating a delay of 10 seconds for demonstration purposes
-      } catch (error) {
-        console.error("Error during payment creation:", error);
-        return res.status(500).json({ error: "Failed to create payment" });
-      }
+    return res.status(200).json({
+      message: "Payment recorded successfully",
+      transactionId,
+      receiptId,
+      paymentStatus: "Success",
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error("Error creating payment record:", error);
+    return res.status(500).json({ error: "Failed to record payment" });
   }
 };
 
