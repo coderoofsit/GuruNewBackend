@@ -76,12 +76,12 @@ const signup = async (req, res) => {
       if (user.isTemp === true) {
         // User already exists and is temporary
         console.log("User is temporary");
+        let otp;
         if(email === "test@guru.com"){
-          const otp = "111111";
+          otp = "111111";
         }else{
-          const otp = generateRandomOTP();
+          otp = generateRandomOTP();
         }
-        // const otp = generateRandomOTP();
         console.log(
           `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
         );
@@ -121,10 +121,11 @@ const signup = async (req, res) => {
       if (permanentUserWithMob) {
         return res.status(400).json({ error: "Mobile number already exists" });
       }
+      let otp;
       if(email === "test@guru.com"){
-        const otp = "111111";
+        otp = "111111";
       }else{
-      const otp = generateRandomOTP();
+      otp = generateRandomOTP();
       }
       console.log(
         `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
@@ -179,10 +180,11 @@ const resendOTP = async (req, res) => {
   try {
     const user = await userModel.findOne({ email, mob });
     if (user) {
+      let otp;
       if(email === "test@guru.com"){
-        const otp = "111111";
+         otp = "111111";
       }else{
-        const otp = generateRandomOTP();
+         otp = generateRandomOTP();
       }
       // const otp = generateRandomOTP();
       console.log(
@@ -277,10 +279,11 @@ const login = async (req, res) => {
           error: "Please complete your signup process first.",
         });
       }
+      let otp;
       if(email === "test@guru.com"){
-        const otp = "111111";
+        otp = "111111";
       }else{
-        const otp = generateRandomOTP();
+        otp = generateRandomOTP();
       }
       console.log(
         `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
