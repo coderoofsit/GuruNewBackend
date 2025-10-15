@@ -76,7 +76,7 @@ const signup = async (req, res) => {
       if (user.isTemp === true) {
         // User already exists and is temporary
         console.log("User is temporary");
-        const otp = generateRandomOTP();
+        const otp = generateRandomOTP(email, mob);
         console.log(
           `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
         );
@@ -117,7 +117,7 @@ const signup = async (req, res) => {
         return res.status(400).json({ error: "Mobile number already exists" });
       }
 
-      const otp = generateRandomOTP();
+      const otp = generateRandomOTP(email, mob);
       console.log(
         `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
       );
@@ -171,7 +171,7 @@ const resendOTP = async (req, res) => {
   try {
     const user = await userModel.findOne({ email, mob });
     if (user) {
-      const otp = generateRandomOTP();
+      const otp = generateRandomOTP(email, mob);
       console.log(
         `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
       );
@@ -211,20 +211,28 @@ const verifySignupOTP = async (req, res) => {
   }
 
   try {
-    const user = await userModel.findOne({ email, otp });
+    const user = await userModel.findOne({ email });
 
     if (user && user.isTemp) {
-      // OTP is valid, move the user from temporary storage to permanent storage
-      user.isTemp = false; // Marking as permanent user
-      await user.save();
+      // Check if this is a test profile with special OTP handling
+      const expectedOTP = isTestProfile(email, user.mob) ? "111111" : user.otp;
+      
+      if (otp === expectedOTP) {
+        // OTP is valid, move the user from temporary storage to permanent storage
+        user.isTemp = false; // Marking as permanent user
+        await user.save();
 
-      // Proceed with further user registration or verification logic here
-      const token = jwt.sign({ userId: user._id }, process.env.PRIVATEKEY);
-      return res
-        .status(200)
-        .json({ message: "OTP verified successfully", token });
+        // Proceed with further user registration or verification logic here
+        const token = jwt.sign({ userId: user._id }, process.env.PRIVATEKEY);
+        return res
+          .status(200)
+          .json({ message: "OTP verified successfully", token });
+      } else {
+        // Invalid OTP
+        return res.status(404).json({ message: "Invalid OTP" });
+      }
     } else {
-      // Invalid OTP or user is not in temporary storage
+      // User not found or not in temporary storage
       return res.status(404).json({ message: "Invalid OTP" });
     }
   } catch (e) {
@@ -264,7 +272,7 @@ const login = async (req, res) => {
           error: "Please complete your signup process first.",
         });
       }
-      const otp = generateRandomOTP();
+      const otp = generateRandomOTP(email, mob);
       console.log(
         `Generated OTP for user with email ${email} and phone number ${mob}: ${otp}`
       );
@@ -346,7 +354,10 @@ const verifyLoginOTP = async (req, res) => {
         });
       }
 
-      if (user.otp === otp) {
+      // Check if this is a test profile with special OTP handling
+      const expectedOTP = isTestProfile(email || user.email, mob || user.mob) ? "111111" : user.otp;
+      
+      if (expectedOTP === otp) {
         // OTP is valid, you can proceed with the login logic here
         const token = jwt.sign({ userId: user._id }, process.env.PRIVATEKEY);
         return res
@@ -1501,8 +1512,18 @@ module.exports = {
   deleteUser,
   getallnotifications
 };
-function generateRandomOTP() {
-  // Generate a random 6-digit OTP
+// Helper function to check if credentials match test profile
+function isTestProfile(email, mob) {
+  return email === "test@guru.com" && mob === "9999999999";
+}
+
+function generateRandomOTP(email, mob) {
+  // Test profile - return fixed OTP for test credentials
+  if (isTestProfile(email, mob)) {
+    return "111111";
+  }
+  
+  // Generate a random 6-digit OTP for normal users
   const min = 100000;
   const max = 999999;
   return Math.floor(Math.random() * (max - min + 1)) + min;
